@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { onAuthStateChanged, signOut, signInAnonymously } from "firebase/auth"
-import { collection, doc, getDoc, onSnapshot } from "firebase/firestore"
-import { LayoutDashboard, ListChecks, TrendingUp, User, Loader2, Zap } from "lucide-react"
+import { useEffect, useState, useMemo } from "react" // Import useMemo
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore"
+import { LayoutDashboard, ListChecks, TrendingUp, User, Loader2, Zap, Settings } from "lucide-react"
 
 import { auth, db } from "@/lib/firebase"
 import { appId } from "@/lib/config"
@@ -17,6 +17,8 @@ import { StudentView } from "@/components/student-view"
 import { QuizTaker } from "@/components/quiz-taker"
 import { ClassManager } from "@/components/class-manager"
 import { getAuth } from "firebase/auth"
+import { StudentSettings } from "@/components/student-settings"
+import { TeacherSettings } from "@/components/teacher-settings"
 
 type Attempt = {
   id: string
@@ -39,7 +41,8 @@ type QuizDoc = {
   status: string
 }
 
-type NavKey = "generate" | "edit" | "bank" | "analytics" | "classes"
+type TeacherNavKey = "generate" | "edit" | "bank" | "analytics" | "classes" | "settings"
+type StudentNavKey = "dashboard" | "settings"
 
 export default function Page() {
   const [userId, setUserId] = useState<string | null>(null)
@@ -47,19 +50,26 @@ export default function Page() {
   const [userRole, setUserRole] = useState<"teacher" | "student" | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  const [navigation, setNavigation] = useState<NavKey>("generate")
-  const [quizzes, setQuizzes] = useState<any[]>([])
+  const [teacherNavigation, setTeacherNavigation] = useState<TeacherNavKey>("generate")
+  const [studentNavigation, setStudentNavigation] = useState<StudentNavKey>("dashboard")
+
   const [generatedQuiz, setGeneratedQuiz] = useState<any[] | null>(null)
   const [generatedQuizTitle, setGeneratedQuizTitle] = useState<string>("")
   const [activeStudentQuiz, setActiveStudentQuiz] = useState<any | null>(null)
   const [studentResults, setStudentResults] = useState<any | null>(null)
+  
+  // Teacher states
   const [teacherViewQuizzes, setTeacherViewQuizzes] = useState<any[]>([])
-  const [assignedQuizzes, setAssignedQuizzes] = useState<any[]>([])
+
+  // Student states - Refactored for stability
   const [studentClasses, setStudentClasses] = useState<Array<{ id: string; name: string }>>([])
+  const [allAssignedQuizzes, setAllAssignedQuizzes] = useState<any[]>([])
+  const [studentAttempts, setStudentAttempts] = useState<any[]>([])
+
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
+      if (user && !user.isAnonymous) {
         setUserId(user.uid)
         setIsLoggedIn(true)
         try {
@@ -68,7 +78,8 @@ export default function Page() {
           if (profileSnap.exists()) {
             const role = profileSnap.data().role as "teacher" | "student"
             setUserRole(role)
-            if (role === "teacher") setNavigation("generate")
+            if (role === "teacher") setTeacherNavigation("generate")
+            if (role === "student") setStudentNavigation("dashboard")
           } else {
             setUserRole(null)
           }
@@ -83,14 +94,11 @@ export default function Page() {
       }
       setIsAuthReady(true)
     })
-
-    if (!auth.currentUser) {
-      signInAnonymously(auth).catch(() => {})
-    }
-
+    
     return () => unsub()
   }, [])
 
+  // Effect for fetching TEACHER data
   useEffect(() => {
     if (!db || !userId || !isAuthReady || userRole !== "teacher") return
 
@@ -108,8 +116,9 @@ export default function Page() {
     )
 
     const attemptsColRef = collection(db, "artifacts", appId, "public/data/attempts")
+    const q = query(attemptsColRef, where("teacherId", "==", userId))
     const unsubAttempts = onSnapshot(
-      attemptsColRef,
+      q,
       (snap) => {
         allAttempts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
         aggregate()
@@ -138,7 +147,7 @@ export default function Page() {
           ...q,
           totalAttempts: a.totalAttempts,
           avgScore,
-          attempts: a.attempts.filter((t) => t.studentId === userId),
+          attempts: a.attempts,
         }
       })
       setTeacherViewQuizzes(aggregated as any[])
@@ -150,95 +159,99 @@ export default function Page() {
     }
   }, [db, userId, isAuthReady, userRole])
 
+  // Effect for fetching STUDENT data - Refactored
   useEffect(() => {
-    if (!db || !userId || !isAuthReady || userRole !== "student") return
+    if (!db || !userId || !isAuthReady || userRole !== "student") {
+      setAllAssignedQuizzes([])
+      setStudentAttempts([])
+      setStudentClasses([])
+      return
+    }
 
     const authUid = getAuth().currentUser?.uid
     if (!authUid) return
 
-    const enrollmentsRef = collection(db, "artifacts", appId, "users", authUid, "enrollments")
-    const assignedUnsubs: Array<() => void> = []
-    const attemptsUnsubs: Array<() => void> = []
-    let studentAttempts: Attempt[] = []
-
-    const unsubEnrollments = onSnapshot(
-      enrollmentsRef,
-      (snap) => {
-        const classes = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
-        setStudentClasses(classes.map((c) => ({ id: c.id, name: c.name })))
-
-        assignedUnsubs.forEach((u) => u())
-        assignedUnsubs.length = 0
-
-        classes.forEach((cls) => {
-          const assignedRef = collection(db, "artifacts", appId, "classes", cls.id, "assigned")
-          const u = onSnapshot(
-            assignedRef,
-            (asnap) => {
-              setAssignedQuizzes((prev) => {
-                const others = prev.filter((q: any) => q.classId !== cls.id)
-                const add = asnap.docs.map((d) => ({
-                  id: d.id,
-                  ...(d.data() as any),
-                  className: cls.name,
-                }))
-                return [...others, ...add]
-              })
-            },
-            (err) => console.error("Assigned listen failed:", err),
-          )
-          assignedUnsubs.push(u)
-        })
-      },
-      (err) => console.error("Enrollments listen failed:", err),
-    )
-
+    // 1. Listener for student's attempts
     const attemptsRef = collection(db, "artifacts", appId, "public/data/attempts")
-    const unsubAttempts = onSnapshot(
-      attemptsRef,
-      (snap) => {
-        studentAttempts = snap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as any) }))
-          .filter((a: any) => a.studentId === authUid)
-        setAssignedQuizzes((prev) => {
-          return prev.map((q: any) => ({
-            ...q,
-            attempts: studentAttempts.filter((a: any) => a.quizId === q.id || a.quizId === q.quizId),
+    const attemptsQuery = query(attemptsRef, where("studentId", "==", authUid))
+    const unsubAttempts = onSnapshot(attemptsQuery, (snap) => {
+      const attempts = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
+      setStudentAttempts(attempts)
+    })
+
+    // 2. Listener for student's enrollments (which then finds assigned quizzes)
+    const enrollmentsRef = collection(db, "artifacts", appId, "users", authUid, "enrollments")
+    let assignedQuizUnsubs: Array<() => void> = []
+    const unsubEnrollments = onSnapshot(enrollmentsRef, (snap) => {
+        
+      assignedQuizUnsubs.forEach(unsub => unsub()) // Unsubscribe from old quiz listeners
+      assignedQuizUnsubs = []
+
+      const classes = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))
+      setStudentClasses(classes.map((c) => ({ id: c.id, name: c.name })))
+
+      let quizzesFromAllClasses: any[] = []
+      if(classes.length === 0) {
+        setAllAssignedQuizzes([])
+        return
+      }
+
+      classes.forEach((cls) => {
+        const assignedRef = collection(db, "artifacts", appId, "classes", cls.id, "assigned")
+        const u = onSnapshot(assignedRef, (asnap) => {
+          const quizzesForThisClass = asnap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as any),
+            className: cls.name,
           }))
+
+          quizzesFromAllClasses = [
+            ...quizzesFromAllClasses.filter(q => q.classId !== cls.id),
+            ...quizzesForThisClass
+          ];
+          setAllAssignedQuizzes(quizzesFromAllClasses);
         })
-      },
-      (err) => console.error("Student attempts listen failed:", err),
-    )
-    attemptsUnsubs.push(unsubAttempts)
+        assignedQuizUnsubs.push(u)
+      })
+    })
 
     return () => {
       unsubEnrollments()
-      assignedUnsubs.forEach((u) => u())
-      attemptsUnsubs.forEach((u) => u())
+      unsubAttempts()
+      assignedQuizUnsubs.forEach(unsub => unsub())
     }
   }, [db, userId, isAuthReady, userRole])
+
+  // Memoized derived state to combine quizzes and attempts for students
+  const assignedQuizzesWithAttempts = useMemo(() => {
+    return allAssignedQuizzes.map(quiz => ({
+      ...quiz,
+      attempts: studentAttempts.filter(attempt => attempt.quizId === quiz.id)
+    }))
+  }, [allAssignedQuizzes, studentAttempts])
 
   const handleLoginComplete = (uid: string, role: "teacher" | "student") => {
     setUserId(uid)
     setUserRole(role)
     setIsLoggedIn(true)
-    if (role === "teacher") setNavigation("generate")
+    if (role === "teacher") setTeacherNavigation("generate")
+    if (role === "student") setStudentNavigation("dashboard")
   }
 
   const handleQuizGenerated = (quiz: any[], title: string) => {
     setGeneratedQuiz(quiz)
     setGeneratedQuizTitle(title)
-    setNavigation("edit")
+    setTeacherNavigation("edit")
   }
   const handleEditQuiz = (quiz: any) => {
     setGeneratedQuiz(quiz.questions)
     setGeneratedQuizTitle(quiz.title)
-    setNavigation("edit")
+    setTeacherNavigation("edit")
   }
   const handleBackToGenerator = () => {
     setGeneratedQuiz(null)
     setGeneratedQuizTitle("")
-    setNavigation("generate")
+    setTeacherNavigation("generate")
   }
 
   const handleSelectQuiz = (quiz: any, attemptData: any | null = null) => {
@@ -270,14 +283,14 @@ export default function Page() {
     { id: "classes", label: "Classes", icon: LayoutDashboard },
   ] as const
 
-  const currentUserIdDisplay = userId ? `User ID: ${userId}` : "Not Signed In"
+  const currentUsername = auth.currentUser?.displayName || (userRole ? `${userRole}` : "")
 
   const renderContent = () => {
     if (!isAuthReady) {
       return (
         <div className="flex justify-center items-center h-48">
           <Loader2 className="animate-spin w-8 h-8 text-primary" />
-          <p className="ml-3 text-lg text-gray-600">Connecting to Firebase...</p>
+          <p className="ml-3 text-lg text-gray-600">Connecting...</p>
         </div>
       )
     }
@@ -287,32 +300,39 @@ export default function Page() {
         if (activeStudentQuiz) {
           return <QuizTaker quiz={activeStudentQuiz} onQuizFinished={handleQuizFinished} results={studentResults} />
         }
+        if (studentNavigation === "settings") {
+          return <StudentSettings onBack={() => setStudentNavigation("dashboard")} />
+        }
         return (
           <StudentView
-            quizzes={[]}
-            assignedQuizzes={assignedQuizzes}
+            assignedQuizzes={assignedQuizzesWithAttempts}
             userId={userId!}
             onSelectQuiz={handleSelectQuiz}
+            studentClasses={studentClasses}
           />
         )
       }
-
-      if (navigation === "generate") {
-        return <QuizGenerator onQuizGenerated={handleQuizGenerated} />
+      
+      if (userRole === "teacher") {
+        if (teacherNavigation === "settings") {
+          return <TeacherSettings onBack={() => setTeacherNavigation("generate")} />
+        }
+        if (teacherNavigation === "generate") {
+          return <QuizGenerator onQuizGenerated={handleQuizGenerated} />
+        }
+        if (teacherNavigation === "edit" && generatedQuiz) {
+          return <QuizEditor quiz={generatedQuiz} initialTitle={generatedQuizTitle} onBack={handleBackToGenerator} />
+        }
+        if (teacherNavigation === "bank") {
+          return <QuizBank quizzes={teacherViewQuizzes} onEdit={handleEditQuiz} />
+        }
+        if (teacherNavigation === "analytics") {
+          return <AnalyticsDashboard quizzes={teacherViewQuizzes} />
+        }
+        if (teacherNavigation === "classes") {
+          return <ClassManager />
+        }
       }
-      if (navigation === "edit" && generatedQuiz) {
-        return <QuizEditor quiz={generatedQuiz} initialTitle={generatedQuizTitle} onBack={handleBackToGenerator} />
-      }
-      if (navigation === "bank") {
-        return <QuizBank quizzes={teacherViewQuizzes} onEdit={handleEditQuiz} />
-      }
-      if (navigation === "analytics") {
-        return <AnalyticsDashboard quizzes={teacherViewQuizzes} />
-      }
-      if (navigation === "classes") {
-        return <ClassManager />
-      }
-      return <QuizGenerator onQuizGenerated={handleQuizGenerated} />
     }
 
     return <AuthFlow onLoginComplete={handleLoginComplete} />
@@ -330,19 +350,23 @@ export default function Page() {
             {isLoggedIn && userRole && (
               <>
                 <p className="text-sm font-semibold text-gray-700 capitalize">
-                  <User className="w-4 h-4 inline-block mr-1 text-primary" /> {userRole} Dashboard
+                  <User className="w-4 h-4 inline-block mr-1 text-primary" /> {currentUsername}
                 </p>
                 <button
+                  onClick={() => userRole === 'teacher' ? setTeacherNavigation("settings") : setStudentNavigation("settings")}
+                  title="Settings"
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+                <button
                   onClick={() => signOut(auth)}
-                  className="px-3 py-1 bg-error text-white text-xs font-semibold rounded-full shadow-md hover:bg-red-700 transition"
+                  className="px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded-full shadow-md hover:bg-red-700 transition"
                 >
                   Sign Out
                 </button>
               </>
             )}
-            <p className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full hidden sm:block">
-              {currentUserIdDisplay}
-            </p>
           </div>
         </div>
       </header>
@@ -356,9 +380,9 @@ export default function Page() {
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setNavigation(item.id as NavKey)}
+                      onClick={() => setTeacherNavigation(item.id as TeacherNavKey)}
                       className={`w-full flex items-center px-3 py-3 rounded-lg text-base font-medium transition duration-150 ease-in-out ${
-                        navigation === item.id
+                        teacherNavigation === item.id
                           ? "bg-primary text-white shadow-lg"
                           : "text-gray-700 hover:bg-gray-100 hover:text-primary"
                       }`}

@@ -107,11 +107,13 @@ export function QuizTaker({
     const finalScore = (correctCount / totalQuestions) * 100
 
     try {
-      const uid = getAuth().currentUser!.uid
+      const authUser = getAuth().currentUser!
       const attemptRef = doc(db, "artifacts", appId, "public/data/attempts", crypto.randomUUID())
       await setDoc(attemptRef, {
         quizId: quiz.id,
-        studentId: uid,
+        classId: quiz.classId,
+        studentId: authUser.uid,
+        studentName: authUser.displayName || "Anonymous",
         teacherId: quiz.teacherId,
         score: finalScore,
         totalQuestions,

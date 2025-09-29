@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle, Edit3, Loader2 } from "lucide-react"
 import { doc, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { appId } from "@/lib/config"
+import { Button } from "@/components/ui/button"
 
 export function QuizEditor({
   quiz,
@@ -91,10 +92,10 @@ export function QuizEditor({
                   value={opt}
                   onChange={(e) => handleQuestionEdit(qIndex, `option_${oIndex}`, e.target.value)}
                   className={`flex-grow text-sm px-2 py-1 border rounded ${
-                    oIndex === q.correctIndex ? "border-success ring-1 ring-success" : "border-gray-300"
+                    oIndex === q.correctIndex ? "border-green-500 ring-1 ring-green-500" : "border-gray-300"
                   }`}
                 />
-                {oIndex === q.correctIndex && <CheckCircle className="w-4 h-4 text-success shrink-0" />}
+                {oIndex === q.correctIndex && <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />}
               </div>
             ))}
             <p className="text-xs text-gray-500 mt-2">
@@ -111,7 +112,7 @@ export function QuizEditor({
               type="text"
               value={q.correctAnswer}
               onChange={(e) => handleQuestionEdit(qIndex, "correctAnswer", e.target.value)}
-              className="w-full text-sm px-2 py-1 border rounded focus:ring-success focus:border-success"
+              className="w-full text-sm px-2 py-1 border rounded focus:ring-green-500 focus:border-green-500"
             />
           </div>
           <div>
@@ -130,12 +131,9 @@ export function QuizEditor({
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={onBack}
-        className="flex items-center text-primary hover:text-primary-dark transition text-sm mb-4"
-      >
+      <Button variant="ghost" onClick={onBack} className="mb-4">
         <ArrowLeft className="w-4 h-4 mr-1" /> Back to Generator
-      </button>
+      </Button>
       <h2 className="text-2xl font-bold text-gray-800 flex items-center">
         <Edit3 className="w-6 h-6 mr-2 text-primary" /> Edit & Approve Quiz
       </h2>
@@ -166,14 +164,8 @@ export function QuizEditor({
           {saveMessage.text}
         </div>
       )}
-
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className={`w-full flex justify-center items-center py-3 px-4 rounded-lg shadow-lg text-base font-semibold text-white transition duration-300 ${
-          saving ? "bg-gray-400 cursor-not-allowed" : "bg-success hover:bg-emerald-600 hover:shadow-xl"
-        }`}
-      >
+      
+      <Button variant="success" onClick={handleSave} disabled={saving} className="w-full py-6 text-base font-semibold">
         {saving ? (
           <>
             <Loader2 className="animate-spin w-5 h-5 mr-3" />
@@ -182,7 +174,7 @@ export function QuizEditor({
         ) : (
           "Approve & Save to Question Bank"
         )}
-      </button>
+      </Button>
     </div>
   )
 }

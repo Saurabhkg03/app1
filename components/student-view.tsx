@@ -1,21 +1,24 @@
 "use client"
 
 import type React from "react"
-import { useMemo } from "react"
-import { GraduationCap, Users } from "lucide-react"
+import { useMemo, useState } from "react"
+import { GraduationCap, Users, BookOpen, ArrowLeft } from "lucide-react"
 import { JoinClass } from "@/components/join-class"
+import { Button } from "@/components/ui/button"
 
 export function StudentView({
-  quizzes,
   onSelectQuiz,
   assignedQuizzes,
   userId,
+  studentClasses,
 }: {
-  quizzes: any[]
   onSelectQuiz: (quiz: any, attemptData?: any | null) => void
   assignedQuizzes: any[]
   userId: string
+  studentClasses: Array<{ id: string; name: string }>
 }) {
+  const [selectedClass, setSelectedClass] = useState<{ id: string; name: string } | null>(null)
+
   const allAttempts = assignedQuizzes.flatMap((q) => q.attempts || [])
 
   const attemptsByDate = useMemo(() => {
@@ -62,100 +65,130 @@ export function StudentView({
     </div>
   )
 
+  const quizzesForSelectedClass = useMemo(() => {
+    if (!selectedClass) return []
+    return assignedQuizzes.filter((quiz) => quiz.classId === selectedClass.id)
+  }, [selectedClass, assignedQuizzes])
+
+  if (selectedClass) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" onClick={() => setSelectedClass(null)} className="font-semibold">
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          Back to All Classes
+        </Button>
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+          <BookOpen className="w-6 h-6 mr-2 text-primary" /> Quizzes for {selectedClass.name}
+        </h2>
+
+        {quizzesForSelectedClass.length === 0 ? (
+          <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500">
+            No quizzes have been assigned to this class yet.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {quizzesForSelectedClass.map((quiz) => (
+              <div key={quiz.id} className="p-4 bg-white rounded-xl shadow-md border border-gray-100 space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">{quiz.title}</h3>
+                    <p className="text-sm text-gray-500">{quiz.questions.length} Questions</p>
+                  </div>
+                  <Button variant="success" onClick={() => onSelectQuiz(quiz)}>
+                    Start New Quiz
+                  </Button>
+                </div>
+
+                {quiz.attempts && quiz.attempts.length > 0 && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-sm font-semibold text-gray-700 mb-2">Past Attempts ({quiz.attempts.length}):</p>
+                    <div className="space-y-1">
+                      {quiz.attempts
+                        .sort((a: any, b: any) => (new Date(b.date) as any) - (new Date(a.date) as any))
+                        .map((attempt: any, idx: number) => (
+                          <div
+                            key={attempt.id}
+                            className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-lg border border-gray-200"
+                          >
+                            <span>
+                              Attempt {quiz.attempts.length - idx}:{" "}
+                              <span className="font-bold text-primary">{attempt.score.toFixed(0)}%</span> on{" "}
+                              {new Date(attempt.date).toLocaleDateString()}
+                            </span>
+                            <button
+                              onClick={() => onSelectQuiz(quiz, attempt)}
+                              className="text-xs text-secondary-foreground hover:text-primary font-medium transition ml-2"
+                            >
+                              Review Details &rarr;
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <JoinClass userId={userId} />
 
-      <h2 className="text-2xl font-bold text-gray-800 flex items-center">
-        <GraduationCap className="w-6 h-6 mr-2 text-primary" /> Student Dashboard
-      </h2>
-
-      <div className="p-6 bg-white rounded-xl shadow-lg border border-gray-100 space-y-4">
-        <h3 className="text-xl font-bold text-primary flex items-center">
-          <Users className="w-5 h-5 mr-2" /> My Progress (Gamification)
-        </h3>
-
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <IconBadge
-            icon={<span className="text-3xl">🔥</span>}
-            label={`${studentData.streak} Day Streak!`}
-            color="bg-yellow-100 text-yellow-800"
-          />
-          <IconBadge
-            icon={<span className="text-3xl">🏅</span>}
-            label={`Total Quizzes: ${studentData.totalAttempts}`}
-            color="bg-green-100 text-green-800"
-          />
-          <IconBadge
-            icon={<span className="text-3xl">🧠</span>}
-            label={`Last Score: ${studentData.lastScore}%`}
-            color="bg-blue-100 text-blue-800"
-          />
+      <div>
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center mb-4">
+          <GraduationCap className="w-6 h-6 mr-2 text-primary" /> Student Dashboard
+        </h2>
+        <div className="p-6 bg-white rounded-xl shadow-lg border border-gray-100 space-y-4">
+          <h3 className="text-xl font-bold text-primary flex items-center">
+            <Users className="w-5 h-5 mr-2" /> My Progress
+          </h3>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <IconBadge
+              icon={<span className="text-3xl">🔥</span>}
+              label={`${studentData.streak} Day Streak!`}
+              color="bg-yellow-100 text-yellow-800"
+            />
+            <IconBadge
+              icon={<span className="text-3xl">🎯</span>}
+              label={`Total Quizzes: ${studentData.totalAttempts}`}
+              color="bg-green-100 text-green-800"
+            />
+            <IconBadge
+              icon={<span className="text-3xl">🏆</span>}
+              label={`Last Score: ${studentData.lastScore}%`}
+              color="bg-blue-100 text-blue-800"
+            />
+          </div>
         </div>
-
-        <p className="text-xs text-gray-500 text-center mt-4">
-          Quiz attempts are logged in Firestore to track your progress.
-        </p>
       </div>
 
-      <h3 className="text-xl font-bold text-gray-800 pt-4 border-t border-gray-200">
-        Available Quizzes & Past Attempts
-      </h3>
-
-      {assignedQuizzes.length === 0 ? (
-        <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500">
-          No quizzes assigned yet. Join a class using a class code to see available quizzes.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {assignedQuizzes.map((quiz) => (
-            <div key={quiz.id} className="p-4 bg-white rounded-xl shadow-md border border-gray-100 space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800">{quiz.title}</h3>
-                  <p className="text-sm text-gray-500">
-                    {quiz.questions.length} Questions • Class: {quiz.className || quiz.classId}
-                  </p>
-                </div>
-                <button
-                  onClick={() => onSelectQuiz(quiz)}
-                  className="px-4 py-2 bg-success text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition"
-                >
-                  Start New Quiz
-                </button>
-              </div>
-
-              {quiz.attempts && quiz.attempts.length > 0 && (
-                <div className="pt-3 border-t border-gray-100">
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Past Attempts ({quiz.attempts.length}):</p>
-                  <div className="space-y-1">
-                    {quiz.attempts
-                      .sort((a: any, b: any) => (new Date(b.date) as any) - (new Date(a.date) as any))
-                      .map((attempt: any, idx: number) => (
-                        <div
-                          key={attempt.id}
-                          className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-lg border border-gray-200"
-                        >
-                          <span>
-                            Attempt {quiz.attempts.length - idx}:{" "}
-                            <span className="font-bold text-primary">{attempt.score.toFixed(0)}%</span> on{" "}
-                            {new Date(attempt.date).toLocaleDateString()}
-                          </span>
-                          <button
-                            onClick={() => onSelectQuiz(quiz, attempt)}
-                            className="text-xs text-secondary hover:text-secondary-dark font-medium transition ml-2"
-                          >
-                            Review Details &rarr;
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="space-y-4">
+        <h3 className="text-xl font-bold text-gray-800 pt-4 border-t border-gray-200">My Classes</h3>
+        {studentClasses.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {studentClasses.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setSelectedClass(c)}
+                className="p-4 bg-white rounded-xl shadow-md border border-gray-100 text-left hover:shadow-lg hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition group"
+              >
+                <h4 className="text-lg font-semibold text-gray-800 group-hover:text-primary transition-colors">{c.name}</h4>
+                <p className="text-sm text-gray-500 mt-1">
+                  {assignedQuizzes.filter((q) => q.classId === c.id).length} quizzes available
+                </p>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500">
+            You are not enrolled in any classes yet. Join a class to see your quizzes.
+          </div>
+        )}
+      </div>
     </div>
   )
 }
