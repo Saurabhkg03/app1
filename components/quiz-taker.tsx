@@ -8,6 +8,7 @@ import { db } from "@/lib/firebase"
 import { appId } from "@/lib/config"
 import { getGeminiApiKey, getAiGradingSchema, fetchWithExponentialBackoff, API_URL_BASE } from "@/lib/ai"
 import { getAuth } from "firebase/auth"
+import Latex from "react-latex-next"
 
 export function QuizTaker({
   quiz,
@@ -161,7 +162,7 @@ export function QuizTaker({
     return (
       <div key={qIndex} className={`p-4 bg-white rounded-xl shadow-md border transition-all ${cardClass}`}>
         <p className="text-lg font-semibold text-gray-800 mb-4">
-          {qIndex + 1}. {q.question} ({q.type})
+          <Latex>{`${qIndex + 1}. ${q.question} (${q.type})`}</Latex>
         </p>
 
         <div className="space-y-3">
@@ -191,7 +192,7 @@ export function QuizTaker({
                   <span className="font-medium mr-3 text-sm bg-gray-200 text-gray-600 px-2 py-0.5 rounded">
                     {String.fromCharCode(65 + oIndex)}
                   </span>
-                  {opt}
+                  <Latex>{opt}</Latex>
                 </label>
               </div>
             ))}
@@ -219,7 +220,7 @@ export function QuizTaker({
                         : "border-gray-200 hover:bg-gray-50 peer-checked:bg-indigo-50 peer-checked:border-primary"
                   }`}
                 >
-                  {opt}
+                  <Latex>{opt}</Latex>
                 </label>
               </div>
             ))}
@@ -243,14 +244,14 @@ export function QuizTaker({
             <p className="font-semibold text-gray-800">{gradingNote}</p>
             {gradingFeedback[qIndex]?.isAiGraded && (
               <p className="text-primary mt-1">
-                <span className="font-medium">AI Rationale:</span> {gradingFeedback[qIndex].rationale}
+                <span className="font-medium">AI Rationale:</span> <Latex>{gradingFeedback[qIndex].rationale}</Latex>
               </p>
             )}
             <p className="text-gray-600 mt-1">
-              <span className="font-medium">Correct Answer:</span> {q.correctAnswer}
+              <span className="font-medium">Correct Answer:</span> <Latex>{q.correctAnswer}</Latex>
             </p>
             <p className="text-gray-500 text-xs mt-1">
-              <span className="font-medium">Explanation:</span> {q.explanation}
+              <span className="font-medium">Explanation:</span> <Latex>{q.explanation}</Latex>
             </p>
           </div>
         )}

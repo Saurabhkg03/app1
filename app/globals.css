@@ -128,4 +128,8 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Make sure SVGs have a default color that works in both themes */
+  svg {
+    @apply text-foreground;
+  }
 }

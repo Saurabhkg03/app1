@@ -3,6 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { TrendingUp, ListChecks, ArrowLeft, User, Clock, CheckCircle, XCircle } from "lucide-react"
+import Latex from "react-latex-next"
 
 export function AnalyticsDashboard({ quizzes }: { quizzes: any[] }) {
   const [selectedQuiz, setSelectedQuiz] = useState<any | null>(null)
@@ -87,7 +88,7 @@ export function AnalyticsDashboard({ quizzes }: { quizzes: any[] }) {
                         return (
                           <div key={qIndex} className="text-sm">
                             <p className="font-semibold text-gray-700">
-                              {qIndex + 1}. {q.question}
+                              <Latex>{`${qIndex + 1}. ${q.question}`}</Latex>
                             </p>
                             <div className="flex items-center space-x-2 mt-1">
                               {isCorrect ? (
@@ -98,13 +99,13 @@ export function AnalyticsDashboard({ quizzes }: { quizzes: any[] }) {
                               <p className="flex-1">
                                 <span className="font-medium">Student's Answer:</span>{" "}
                                 <span className={isCorrect ? "text-gray-800" : "text-error"}>
-                                  {studentAnswerDisplay || "Not Answered"}
+                                  <Latex>{studentAnswerDisplay || "Not Answered"}</Latex>
                                 </span>
                               </p>
                             </div>
                             {!isCorrect && (
                               <p className="pl-6 text-xs text-gray-500 mt-1">
-                                Correct Answer: {q.correctAnswer}
+                                Correct Answer: <Latex>{q.correctAnswer}</Latex>
                               </p>
                             )}
                           </div>

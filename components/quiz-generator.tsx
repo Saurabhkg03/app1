@@ -2,9 +2,14 @@
 
 import type React from "react"
 import { useMemo, useState } from "react"
-import { Loader2, Zap, Globe, BookOpen } from "lucide-react"
+import { Loader2, Zap, Globe, BookOpen, Upload, X } from "lucide-react"
 import { getQuizSchema, fetchWithExponentialBackoff, API_URL_BASE } from "@/lib/ai"
 import { getGeminiApiKey } from "@/lib/ai"
+import * as pdfjs from "pdfjs-dist"
+
+// Set up the worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.mjs`
+
 
 export function QuizGenerator({
   onQuizGenerated,
@@ -20,6 +25,8 @@ export function QuizGenerator({
   const [multilingual, setMultilingual] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [fileContent, setFileContent] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
 
   const [typeCounts, setTypeCounts] = useState<Record<string, number>>({
     MCQ: 5,
@@ -38,6 +45,38 @@ export function QuizGenerator({
     ],
     [],
   )
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.type === "application/pdf") {
+      setFileName(file.name)
+      const reader = new FileReader()
+      reader.onload = async (event) => {
+        if (event.target?.result) {
+          try {
+            const loadingTask = pdfjs.getDocument(event.target.result as ArrayBuffer)
+            const pdf = await loadingTask.promise
+            let text = ""
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i)
+              const textContent = await page.getTextContent()
+              text += textContent.items.map((item: any) => item.str).join(" ")
+            }
+            setFileContent(text)
+          } catch (pdfError) {
+            setError("Failed to parse PDF.")
+            setFileContent(null)
+            setFileName(null)
+          }
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      setError("Only PDF files are supported at this time.")
+    }
+  }
 
   const handleTypeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value, checked } = e.target
@@ -60,8 +99,8 @@ export function QuizGenerator({
       setError("Please enter a title for your quiz.")
       return
     }
-    if (!topic && !content) {
-      setError("Please enter a topic or paste notes to generate a quiz.")
+    if (!topic && !content && !fileContent) {
+      setError("Please provide a topic, paste notes, or upload a file.")
       return
     }
     if (totalQuestions === 0) {
@@ -72,7 +111,11 @@ export function QuizGenerator({
     setError("")
     setLoading(true)
 
-    const promptContent = content ? `From the following content: "${content}"` : `On the topic of: "${topic}"`
+    const promptContent = fileContent
+      ? `From the following content: "${fileContent}"`
+      : content
+      ? `From the following content: "${content}"`
+      : `On the topic of: "${topic}"`
 
     const breakdownString = availableTypes
       .filter((t) => (questionTypes as any).includes(t.value) && (typeCounts as any)[t.value] > 0)
@@ -83,7 +126,7 @@ export function QuizGenerator({
     let systemPrompt =
       "You are a professional educational quiz generator. Your goal is to create a quiz that adheres strictly to the user's requirements and the JSON schema. Use varied Bloom's taxonomy levels (knowledge, application, analysis) appropriate for a " +
       difficulty +
-      " difficulty quiz."
+      " difficulty quiz. For any mathematical equations or scientific notations, use LaTeX syntax enclosed in `$` delimiters (e.g., `$E=mc^2$`)."
 
     if (curriculumAligned) {
       systemPrompt += " Ensure questions are aligned with common 9th-grade educational standards for US curricula."
@@ -146,6 +189,30 @@ export function QuizGenerator({
         </div>
 
         <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Upload a File (PDF only)</label>
+            {fileName ? (
+                <div className="flex items-center justify-between p-2 bg-gray-100 border rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">{fileName}</span>
+                    <button onClick={() => { setFileContent(null); setFileName(null); }} className="p-1 text-gray-500 hover:text-red-600">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : (
+                <div className="flex items-center justify-center w-full">
+                    <label htmlFor="file-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <Upload className="w-8 h-8 mb-2 text-gray-500" />
+                            <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                            <p className="text-xs text-gray-500">PDF only (PPT/DOCX coming soon)</p>
+                        </div>
+                        <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".pdf" />
+                    </label>
+                </div>
+            )}
+        </div>
+
+
+        <div>
           <label htmlFor="topic" className="block text-sm font-medium text-gray-700 mb-1">
             Topic Name (Optional)
           </label>
@@ -172,7 +239,7 @@ export function QuizGenerator({
             placeholder="Paste lesson notes, textbook excerpts, or key concepts here..."
           />
           <div className="mt-2 p-2 bg-indigo-50 border-l-4 border-primary text-sm text-gray-700 rounded">
-            *If both Topic and Notes are provided, the AI will prioritize the notes.*
+            *AI will prioritize uploaded file, then pasted notes, then topic name.*
           </div>
         </div>
 

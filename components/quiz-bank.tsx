@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase"
 import { appId } from "@/lib/config"
 import { getAuth } from "firebase/auth"
 import { useEffect, useState } from "react"
+import jsPDF from "jspdf"
 
 export function QuizBank({
   quizzes,
@@ -25,29 +26,31 @@ export function QuizBank({
     }
   }
 
-  const handleExport = (quiz: any, format: "Word" | "PDF" | "Google Form") => {
-    let content: string
-    let mimeType: string
-    let extension: string
-
+  const handleExport = (quiz: any, format: "Word" | "PDF" | "Google Form" | "JSON") => {
     const generateHtmlContent = () => {
       let html = `<!DOCTYPE html><html><head><title>${quiz.title}</title><style>
                 body{font-family: Arial, sans-serif; margin: 40px;} 
                 h1{color: #3f51b5;} 
-                .question{margin-bottom: 20px; border-left: 4px solid #ccc; padding-left: 10px;}
+                .question-container{margin-bottom: 20px; border-left: 4px solid #ccc; padding-left: 10px;}
+                .question-title{font-weight: bold;}
+                .options-list{list-style-type: lower-alpha; padding-left: 20px;}
                 .answer{font-weight: bold; color: #4CAF50;}
                 .explanation{font-style: italic; color: #666;}
             </style></head><body>`
       html += `<h1>${quiz.title}</h1>`
       quiz.questions.forEach((q: any, index: number) => {
-        html += `<div class="question"><h2>${index + 1}. ${q.question} (${q.type})</h2>`
+        html += `<div class="question-container">
+                    <p class="question-title">${index + 1}. ${q.question} (${q.type})</p>`
         if (q.options && q.options.length) {
-          q.options.forEach((opt: string, oIndex: number) => {
-            html += `<p>${String.fromCharCode(65 + oIndex)}. ${opt}</p>`
+          html += `<ul class="options-list">`
+          q.options.forEach((opt: string) => {
+            html += `<li>${opt}</li>`
           })
+          html += `</ul>`
         }
-        html += `<p class="answer">Correct Answer: ${q.correctAnswer}</p>`
-        html += `<p class="explanation">Explanation: ${q.explanation}</p></div>`
+        html += `<p class="answer">Correct Answer: ${q.correctAnswer}</p>
+                   <p class="explanation">Explanation: ${q.explanation}</p>
+                 </div>`
       })
       html += `</body></html>`
       return html
@@ -70,30 +73,87 @@ export function QuizBank({
       })
       return text
     }
+    
+    const filename = `${quiz.title.replace(/\s/g, "_")}_Export`
 
     if (format === "Word") {
-      content = generateHtmlContent()
-      mimeType = "application/msword"
-      extension = "doc"
-    } else if (format === "PDF" || format === "Google Form") {
-      content = generateTextContent(format === "Google Form")
-      mimeType = "text/plain"
-      extension = "txt"
-    } else {
+      const content = generateHtmlContent()
+      const blob = new Blob([content], { type: "application/msword" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${filename}.doc`
+      a.click()
+      URL.revokeObjectURL(url)
+    } else if (format === "PDF") {
+        const doc = new jsPDF()
+        doc.setFont("Helvetica")
+        doc.setFontSize(16)
+        doc.text(quiz.title, 10, 20)
+        
+        let y = 30
+        
+        quiz.questions.forEach((q:any, index:number) => {
+            if (y > 280) {
+                doc.addPage()
+                y = 20
+            }
+            doc.setFontSize(12)
+            doc.setFont("Helvetica", "bold")
+            const questionText = `${index + 1}. ${q.question} (${q.type})`
+            const splitQuestion = doc.splitTextToSize(questionText, 180)
+            doc.text(splitQuestion, 10, y)
+            y += (splitQuestion.length * 5)
+            
+            doc.setFont("Helvetica", "normal")
+            if (q.options && q.options.length) {
+                q.options.forEach((opt:string, oIndex:number) => {
+                    doc.text(`${String.fromCharCode(97 + oIndex)}. ${opt}`, 15, y)
+                    y += 7
+                })
+            }
+
+            doc.setTextColor(0, 150, 0)
+            doc.text(`Correct Answer: ${q.correctAnswer}`, 15, y)
+            y += 7
+            
+            doc.setTextColor(100, 100, 100)
+            doc.setFont("Helvetica", "italic")
+            const explanationText = `Explanation: ${q.explanation}`
+            const splitExplanation = doc.splitTextToSize(explanationText, 170)
+            doc.text(splitExplanation, 15, y)
+            y += (splitExplanation.length * 5) + 5
+            
+            doc.setTextColor(0, 0, 0) // Reset color
+            doc.setFont("Helvetica", "normal")
+        })
+
+        doc.save(`${filename}.pdf`)
+
+    } else if (format === "Google Form") {
+      const content = generateTextContent(true)
+      const blob = new Blob([content], { type: "text/plain" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${filename}_GoogleForm.txt`
+      a.click()
+      URL.revokeObjectURL(url)
+    } else if (format === "JSON") {
+        const content = JSON.stringify(quiz, null, 2)
+        const blob = new Blob([content], { type: "application/json" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `${filename}.json`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+     else {
       console.error("Unknown export format.")
       return
     }
 
-    const filename = `${quiz.title.replace(/\s/g, "_")}_Export.${extension}`
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
   }
 
   const [classes, setClasses] = useState<Array<{ id: string; name: string; code: string }>>([])
@@ -189,9 +249,9 @@ export function QuizBank({
                   >
                     <Download className="w-5 h-5" />
                   </button>
-                  <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-20 hidden group-hover:block">
+                  <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                     <div className="py-1">
-                      {(["Word", "PDF", "Google Form"] as const).map((format) => (
+                      {(["Word", "PDF", "Google Form", "JSON"] as const).map((format) => (
                         <a
                           key={format}
                           href="#"
