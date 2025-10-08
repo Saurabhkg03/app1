@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import Latex from "react-latex-next"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { getAuth } from "firebase/auth"
 
 export function QuizEditor({
   quiz,
@@ -41,13 +42,20 @@ export function QuizEditor({
   const handleSave = async () => {
     setSaving(true)
     setSaveMessage(null)
+    const authUser = getAuth().currentUser;
+    if (!authUser) {
+        setSaveMessage({ type: "error", text: "You must be logged in to save." });
+        setSaving(false);
+        return;
+    }
+
     try {
       const quizRef = doc(
         db,
         "artifacts",
         appId,
         "users",
-        (await import("firebase/auth")).getAuth().currentUser!.uid,
+        authUser.uid,
         "quizzes",
         crypto.randomUUID(),
       )
@@ -55,7 +63,7 @@ export function QuizEditor({
         title,
         questions: currentQuiz,
         createdAt: new Date().toISOString(),
-        teacherId: (await import("firebase/auth")).getAuth().currentUser!.uid,
+        teacherId: authUser.uid,
         status: "draft",
       })
       setSaveMessage({ type: "success", text: `Quiz "${title}" saved successfully to your Question Bank!` })
@@ -99,10 +107,10 @@ export function QuizEditor({
                     value={opt}
                     onChange={(e) => handleQuestionEdit(qIndex, `option_${oIndex}`, e.target.value)}
                     className={`flex-grow text-sm px-2 py-1 border rounded ${
-                      oIndex.toString() === q.correctIndex ? "border-green-500 ring-1 ring-green-500" : "border-gray-300"
+                      oIndex.toString() === q.correctIndex.toString() ? "border-green-500 ring-1 ring-green-500" : "border-gray-300"
                     }`}
                   />
-                  {oIndex.toString() === q.correctIndex && <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />}
+                  {oIndex.toString() === q.correctIndex.toString() && <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />}
                 </div>
               ))}
               <p className="text-xs text-gray-500 mt-2">

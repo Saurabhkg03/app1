@@ -2,11 +2,11 @@
 
 import type React from "react"
 import { useState } from "react"
-import { ListChecks, Loader2, ArrowLeft } from "lucide-react"
+import { ListChecks, Loader2, ArrowLeft, Beaker } from "lucide-react"
 import { doc, setDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase"
-import { appId } from "@/lib/config"
-import { getGeminiApiKey, getAiGradingSchema, fetchWithExponentialBackoff, API_URL_BASE } from "@/lib/ai"
+import { db } from "../lib/firebase"
+import { appId } from "../lib/config"
+import { getGeminiApiKey, getAiGradingSchema, fetchWithExponentialBackoff, API_URL_BASE } from "../lib/ai"
 import { getAuth } from "firebase/auth"
 import Latex from "react-latex-next"
 
@@ -23,6 +23,7 @@ export function QuizTaker({
   const [isSaving, setIsSaving] = useState(false)
 
   const isReviewMode = !!results
+  const isPracticeMode = quiz.isPractice === true;
   const studentAnswers = isReviewMode ? results.answers : localAnswers
   const gradingFeedback = isReviewMode ? results.feedback : {}
 
@@ -107,23 +108,25 @@ export function QuizTaker({
 
     const finalScore = (correctCount / totalQuestions) * 100
 
-    try {
-      const authUser = getAuth().currentUser!
-      const attemptRef = doc(db, "artifacts", appId, "public/data/attempts", crypto.randomUUID())
-      await setDoc(attemptRef, {
-        quizId: quiz.id,
-        classId: quiz.classId,
-        studentId: authUser.uid,
-        studentName: authUser.displayName || "Anonymous",
-        teacherId: quiz.teacherId,
-        score: finalScore,
-        totalQuestions,
-        date: new Date().toISOString(),
-        studentAnswers: localAnswers,
-        gradingFeedback: shortAnswerAiGrading,
-      })
-    } catch (error) {
-      console.error("Failed to save quiz attempt:", error)
+    if (!isPracticeMode) {
+        try {
+          const authUser = getAuth().currentUser!
+          const attemptRef = doc(db, "artifacts", appId, "public/data/attempts", crypto.randomUUID())
+          await setDoc(attemptRef, {
+            quizId: quiz.id,
+            classId: quiz.classId,
+            studentId: authUser.uid,
+            studentName: authUser.displayName || "Anonymous",
+            teacherId: quiz.teacherId,
+            score: finalScore,
+            totalQuestions,
+            date: new Date().toISOString(),
+            studentAnswers: localAnswers,
+            gradingFeedback: shortAnswerAiGrading,
+          })
+        } catch (error) {
+          console.error("Failed to save quiz attempt:", error)
+        }
     }
 
     setIsSaving(false)
@@ -182,9 +185,9 @@ export function QuizTaker({
                 <label
                   htmlFor={`q${qIndex}o${oIndex}`}
                   className={`w-full cursor-pointer transition p-3 rounded-lg border-2 ${
-                    isReviewMode && oIndex === q.correctIndex
+                    isReviewMode && oIndex.toString() === q.correctIndex.toString()
                       ? "border-success bg-green-50"
-                      : isReviewMode && studentAnswers[qIndex] === oIndex.toString() && oIndex !== q.correctIndex
+                      : isReviewMode && studentAnswers[qIndex] === oIndex.toString() && oIndex.toString() !== q.correctIndex.toString()
                         ? "border-error bg-red-50"
                         : "border-gray-200 hover:bg-gray-50 peer-checked:bg-indigo-50 peer-checked:border-primary"
                   }`}
@@ -265,13 +268,13 @@ export function QuizTaker({
         <div className="p-6 bg-white rounded-xl shadow-2xl text-center border-b-4 border-success">
           <h2 className="text-3xl font-extrabold text-success mb-2">Review: {quiz.title}</h2>
           <p className="text-xl font-semibold text-gray-800">
-            Score: {results.score.toFixed(1)}% ({results.score} correct out of {results.total})
+            Score: {results.score.toFixed(1)}% ({Math.round(results.score / 100 * results.total)} correct out of {results.total})
           </p>
           <button
             onClick={() => onQuizFinished(null)}
             className="mt-4 px-4 py-2 text-primary font-semibold hover:text-primary-dark transition text-sm flex items-center mx-auto"
           >
-            <ArrowLeft className="w-4 h-4 mr-1" /> Return to Quizzes
+            <ArrowLeft className="w-4 h-4 mr-1" /> {isPracticeMode ? "Return to Playground" : "Return to Quizzes"}
           </button>
         </div>
         <h3 className="text-xl font-bold text-gray-800">Review Your Answers</h3>
@@ -285,11 +288,17 @@ export function QuizTaker({
       <h2 className="text-2xl font-bold text-gray-800 flex items-center">
         <ListChecks className="w-6 h-6 mr-2 text-primary" /> Taking Quiz: {quiz.title}
       </h2>
+      {isPracticeMode && (
+          <div className="p-3 bg-yellow-100 text-yellow-800 border-l-4 border-yellow-500 rounded-r-lg text-sm flex items-center">
+              <Beaker className="w-4 h-4 mr-2" />
+              This is a practice quiz. Your results will not be saved or sent to your teacher.
+          </div>
+      )}
       <div className="space-y-6">{quiz.questions.map(renderQuestion)}</div>
       <button
         type="submit"
         disabled={isSaving}
-        className={`w-full py-3 px-4 text-white font-bold rounded-lg shadow-lg transition ${
+        className={`w-full py-3 px-4 text-white font-bold rounded-lg shadow-lg transition flex justify-center items-center ${
           isSaving ? "bg-gray-400" : "bg-primary hover:bg-primary-dark"
         }`}
       >
@@ -305,3 +314,4 @@ export function QuizTaker({
     </form>
   )
 }
+
