@@ -10,6 +10,7 @@ import { auth, db } from "../lib/firebase"
 import { appId } from "../lib/config"
 
 import { AuthFlow } from "../components/auth-flow"
+import { LandingPage } from "../components/landing-page"
 import { QuizGenerator } from "../components/quiz-generator"
 import { QuizEditor } from "../components/quiz-editor"
 import { QuizBank } from "../components/quiz-bank"
@@ -53,6 +54,7 @@ export default function Page() {
   const [isAuthReady, setIsAuthReady] = useState(false)
   const [userRole, setUserRole] = useState<"teacher" | "student" | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [showAuthFlow, setShowAuthFlow] = useState(false)
 
   const [generatedQuiz, setGeneratedQuiz] = useState<any[] | null>(null)
   const [generatedQuizTitle, setGeneratedQuizTitle] = useState<string>("")
@@ -257,8 +259,13 @@ export default function Page() {
     setUserId(uid)
     setUserRole(role)
     setIsLoggedIn(true)
+    setShowAuthFlow(false)
     const newPath = role === 'teacher' ? '/?view=generate' : '/?view=dashboard';
     router.push(newPath)
+  }
+
+  const handleGetStarted = () => {
+    setShowAuthFlow(true)
   }
 
   const handleQuizGenerated = (quiz: any[], title: string) => {
@@ -397,7 +404,32 @@ export default function Page() {
       }
     }
 
-    return <AuthFlow onLoginComplete={handleLoginComplete} />
+    if (showAuthFlow) {
+      return <AuthFlow onLoginComplete={handleLoginComplete} />
+    }
+
+    return <LandingPage onGetStarted={handleGetStarted} />
+  }
+
+  if (!isLoggedIn || !userRole) {
+    return (
+      <div className="min-h-screen bg-white">
+        {showAuthFlow && (
+          <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+            <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+              <h1 className="text-2xl font-bold text-blue-600 flex items-center">
+                <LayoutDashboard className="w-6 h-6 mr-2" /> {"EduQuizAI"}
+              </h1>
+            </div>
+          </header>
+        )}
+        <div className={showAuthFlow ? "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" : ""}>
+          <div className={showAuthFlow ? "bg-white p-6 md:p-8 rounded-xl shadow-2xl" : ""}>
+            {renderContent()}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
